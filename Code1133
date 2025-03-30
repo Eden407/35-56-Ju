@@ -2,6 +2,10 @@ import sys
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
+import urllib3
+
+# Disable insecure request warnings (for testing only)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ANSI color codes for terminal output
 RED = "\033[31m"
@@ -16,7 +20,8 @@ def search_ios_app(app_name):
     search_url = f"https://apps.apple.com/us/search?term={query}"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        response = requests.get(search_url, headers=headers)
+        # Disable SSL verification by setting verify=False
+        response = requests.get(search_url, headers=headers, verify=False)
         response.raise_for_status()
     except Exception as e:
         print(f"{RED}[iOS] Error fetching search results: {e}{RESET}")
@@ -33,9 +38,9 @@ def search_ios_app(app_name):
     if not app_url.startswith("http"):
         app_url = "https://apps.apple.com" + app_url
 
-    # Fetch the app's page
+    # Fetch the app's page (with SSL verification disabled)
     try:
-        response2 = requests.get(app_url, headers=headers)
+        response2 = requests.get(app_url, headers=headers, verify=False)
         response2.raise_for_status()
     except Exception as e:
         print(f"{RED}[iOS] Error fetching app details: {e}{RESET}")
@@ -44,7 +49,6 @@ def search_ios_app(app_name):
     soup2 = BeautifulSoup(response2.text, "html.parser")
 
     # Attempt to extract version info.
-    # One strategy is to look for a list item (or similar) that starts with "Version"
     version = None
     for li in soup2.find_all("li"):
         text = li.get_text(strip=True)
@@ -55,7 +59,6 @@ def search_ios_app(app_name):
         version = "Version info not found"
 
     # Attempt to extract the "What's New" (release notes) section.
-    # Many App Store pages include a section with aria-label "What's New"
     release_notes = None
     whats_new_section = soup2.find("section", attrs={"aria-label": "What's New"})
     if whats_new_section:
