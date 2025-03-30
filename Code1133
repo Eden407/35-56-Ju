@@ -32,41 +32,42 @@ def search_ios_app(app_name):
 
     soup2 = BeautifulSoup(response2.text, "html.parser")
 
-    # --- Attempt 1: Look for list items that start with "Version" ---
+    # --- Extract Version Info ---
     version = None
     for li in soup2.find_all("li"):
         text = li.get_text(strip=True)
         if text.startswith("Version"):
             version = text.replace("Version", "").strip()
             break
-
-    # --- Attempt 2: Look for any element containing "Version" ---
     if not version:
         version_candidate = soup2.find(string=lambda t: t and "Version" in t)
         if version_candidate:
-            # This is a fallback; you might need to adjust this logic
             version = version_candidate.split("Version")[-1].strip()
     if not version:
         version = "Version info not found"
 
     # --- Extract Release Notes ---
-    # First try by locating the section with aria-label "What's New"
     release_notes = None
+
+    # Attempt 1: Look for a section with aria-label "What's New"
     whats_new_section = soup2.find("section", attrs={"aria-label": "What's New"})
     if whats_new_section:
+        # Sometimes the release notes are within a <p> tag inside this section
         p_elem = whats_new_section.find("p")
         if p_elem:
-            release_notes = p_elem.get_text(strip=True)
+            release_notes = p_elem.get_text(separator="\n", strip=True)
+        else:
+            release_notes = whats_new_section.get_text(separator="\n", strip=True)
 
-    # As a fallback, search for an element that contains "What's New"
+    # Attempt 2: Look for header tags containing "What's New" and then find the following element
     if not release_notes:
-        whats_new_heading = soup2.find(string=lambda t: t and "What's New" in t)
-        if whats_new_heading:
-            parent = whats_new_heading.parent
-            p_elem = parent.find_next("p")
-            if p_elem:
-                release_notes = p_elem.get_text(strip=True)
+        header = soup2.find(lambda tag: tag.name in ["h2", "h3"] and "What's New" in tag.text)
+        if header:
+            next_elem = header.find_next_sibling()
+            if next_elem:
+                release_notes = next_elem.get_text(separator="\n", strip=True)
 
+    # Final fallback if still not found
     if not release_notes:
         release_notes = "Release notes not found"
 
