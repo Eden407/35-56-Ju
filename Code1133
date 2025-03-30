@@ -1,113 +1,120 @@
-import sys
-import requests
-from bs4 import BeautifulSoup
+from requests_html import HTMLSession
 import urllib.parse
-import urllib3
+import sys
 
-# Disable insecure request warnings (for testing only)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# ANSI color codes for terminal output
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-BLUE = "\033[34m"
-RESET = "\033[0m"
-
-def search_ios_app(app_name):
+def fetch_ios_data(app_name):
+    session = HTMLSession()
     query = urllib.parse.quote(app_name)
-    # Use the iTunes Search API to get the app's public page URL
+    # Use iTunes Search API to get the app's public page URL
     search_url = f"https://itunes.apple.com/search?term={query}&entity=software"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    r = session.get(search_url)
     try:
-        response = requests.get(search_url, headers=headers, verify=False)
-        response.raise_for_status()
-        data = response.json()
-        if not data.get("results"):
-            print(f"{RED}[iOS] No results found for '{app_name}'.{RESET}")
-            return
-        app_url = data["results"][0].get("trackViewUrl")
-        if not app_url:
-            print(f"{RED}[iOS] App URL not found in search results.{RESET}")
-            return
+        data = r.json()
     except Exception as e:
-        print(f"{RED}[iOS] Failed to get app page: {e}{RESET}")
+        print("Error parsing iTunes API response:", e)
         return
 
-    # Fetch the app's detail page HTML
-    try:
-        html = requests.get(app_url, headers=headers, verify=False).text
-        soup = BeautifulSoup(html, "html.parser")
-    except Exception as e:
-        print(f"{RED}[iOS] Failed to fetch or parse page: {e}{RESET}")
+    if not data.get("results"):
+        print("No iOS app found for", app_name)
         return
 
-    # Extract Version Info by scanning list items for one that starts with "Version"
-    version = None
-    for li in soup.find_all("li"):
-        text = li.get_text(strip=True)
-        if text.startswith("Version"):
-            version = text.replace("Version", "").strip()
-            break
-    if not version:
-        version = "Version not found"
+    track_view_url = data["results"][0].get("trackViewUrl")
+    if not track_view_url:
+        print("No trackViewUrl found for iOS app")
+        return
 
-    # Extract Release Notes by finding an <h2> with "What’s New" and grabbing the next <p> or <div>
+    print("\niOS App URL:", track_view_url)
+    # Fetch the app detail page and render JavaScript if needed
+    r = session.get(track_view_url)
+    try:
+        r.html.render(timeout=10)
+    except Exception as e:
+        print("Error rendering iOS page:", e)
+    
+    # --- Extract Version ---
+    version = "Version not found"
+    # Try to find an element (for example, an <li> element) that contains "Version"
+    version_elem = r.html.find("li", containing="Version", first=True)
+    if version_elem:
+        version = version_elem.text.strip()
+    
+    # --- Extract Release Notes ---
     release_notes = "Release notes not found"
-    h2 = soup.find("h2", string=lambda s: s and "What’s New" in s)
-    if h2:
-        next_block = h2.find_next(["p", "div"])
-        if next_block:
-            release_notes = next_block.get_text(separator="\n", strip=True)
+    # Look for a header containing "What's New" or "What’s New"
+    header = r.html.find("h2", containing="What's New", first=True)
+    if not header:
+        header = r.html.find("h2", containing="What’s New", first=True)
+    if header:
+        # Try to get the next sibling element's text using the underlying element
+        try:
+            sibling = header.element.getnext()
+            if sibling is not None:
+                release_notes = sibling.text_content().strip()
+        except Exception as e:
+            print("Error extracting iOS release notes:", e)
+    
+    print("\niOS Data:")
+    print("Version:", version)
+    print("Release Notes:", release_notes)
 
-    print(f"\n{BLUE}[iOS]{RESET}")
-    print(f"{GREEN}App URL:{RESET} {app_url}")
-    print(f"{YELLOW}Version:{RESET} {version}")
-    print(f"{YELLOW}Release Notes:{RESET}\n{release_notes}")
-
-def search_android_app(app_name):
+def fetch_android_data(app_name):
+    session = HTMLSession()
     query = urllib.parse.quote(app_name)
-    search_url = f"https://play.google.com/store/search?q={query}&c=apps&hl=en&gl=us"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    search_url = f"https://play.google.com/store/search?q={query}&c=apps"
+    r = session.get(search_url)
     try:
-        r = requests.get(search_url, headers=headers)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        # Find the first app detail link from Google Play
-        app_link = soup.select_one("a[href^='/store/apps/details?id=']")
-        if not app_link:
-            print(f"{RED}[Android] App '{app_name}' not found on Google Play.{RESET}")
-            return
-        app_url = "https://play.google.com" + app_link["href"]
-        r = requests.get(app_url, headers=headers)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        
-        title_tag = soup.find("h1", class_="AHFaub")
-        title = title_tag.get_text(strip=True) if title_tag else "Unknown App"
-        
-        # "What's New" on Google Play is typically in a div with class "W4P4ne"
-        whats_new_section = soup.find("div", class_="W4P4ne")
-        release_notes = whats_new_section.get_text(separator="\n", strip=True) if whats_new_section else "No release notes found."
-        
-        print(f"\n{BLUE}[Android]{RESET}")
-        print(f"{GREEN}{title}{RESET}")
-        print(f"{YELLOW}Release Notes:{RESET}\n{release_notes}")
+        r.html.render(timeout=10)
     except Exception as e:
-        print(f"{RED}[Android] Error fetching app details: {e}{RESET}")
+        print("Error rendering Android search page:", e)
+    
+    # Find the first app link (href contains '/store/apps/details?id=')
+    app_link = r.html.find("a[href*='/store/apps/details?id=']", first=True)
+    if not app_link:
+        print("No Android app found for", app_name)
+        return
+    app_url = "https://play.google.com" + app_link.attrs.get("href", "")
+    print("\nAndroid App URL:", app_url)
+    
+    r = session.get(app_url)
+    try:
+        r.html.render(timeout=10, sleep=2)
+    except Exception as e:
+        print("Error rendering Android app page:", e)
+    
+    # --- Extract Version ---
+    android_version = "Version not found"
+    # The Android version is usually located in a container within the "Additional Information" section.
+    # This example uses a CSS selector to find a div with class "hAyfc" that contains "Current Version"
+    version_elem = r.html.find("div.hAyfc", containing="Current Version", first=True)
+    if version_elem:
+        # Within this container, the actual version is usually in a span with class "htlgb"
+        span_elem = version_elem.find("span.htlgb", first=True)
+        if span_elem:
+            android_version = span_elem.text.strip()
+    
+    # --- Extract Release Notes ---
+    android_release_notes = "Release notes not found"
+    # On Google Play, the "What's New" content is typically inside an element with a class like "W4P4ne"
+    notes_elem = r.html.find("div.W4P4ne", first=True)
+    if notes_elem:
+        android_release_notes = notes_elem.text.strip()
+
+    print("\nAndroid Data:")
+    print("Version:", android_version)
+    print("Release Notes:", android_release_notes)
 
 def main():
     try:
-        app_name = input(f"{YELLOW}Enter the app name to check: {RESET}").strip()
-    except EOFError:
-        sys.exit(f"{RED}No input provided. Exiting.{RESET}")
+        app_name = input("Enter the app name to check: ").strip()
+    except Exception as e:
+        sys.exit("No input provided. Exiting.")
     
     if not app_name:
-        sys.exit(f"{RED}No app name provided. Exiting.{RESET}")
+        sys.exit("No app name provided. Exiting.")
     
-    print(f"\nFetching latest release info for '{app_name}'...")
-    search_ios_app(app_name)
-    search_android_app(app_name)
+    print("\nFetching latest release info for:", app_name)
+    fetch_ios_data(app_name)
+    fetch_android_data(app_name)
 
 if __name__ == "__main__":
     main()
