@@ -16,29 +16,29 @@ RESET = "\033[0m"
 
 def search_ios_app(app_name):
     query = urllib.parse.quote(app_name)
-    # Build the search URL for the US App Store
-    search_url = f"https://apps.apple.com/us/search?term={query}"
+    # Use the iTunes Search API only to locate the app's page URL
+    search_url = f"https://itunes.apple.com/search?term={query}&entity=software"
     headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        # Disable SSL verification by setting verify=False
         response = requests.get(search_url, headers=headers, verify=False)
         response.raise_for_status()
     except Exception as e:
         print(f"{RED}[iOS] Error fetching search results: {e}{RESET}")
         return None
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    # Find the first link that looks like an app detail page (pattern: /us/app/…/id[digits])
-    app_link = soup.find("a", href=lambda href: href and "/us/app/" in href and "/id" in href)
-    if not app_link:
+    data = response.json()
+    results = data.get("results", [])
+    if not results:
         print(f"{RED}[iOS] App '{app_name}' not found in search results.{RESET}")
         return None
 
-    app_url = app_link.get("href")
-    if not app_url.startswith("http"):
-        app_url = "https://apps.apple.com" + app_url
+    # Get the first result's detail page URL
+    app_url = results[0].get("trackViewUrl")
+    if not app_url:
+        print(f"{RED}[iOS] App URL not found in search result.{RESET}")
+        return None
 
-    # Fetch the app's page (with SSL verification disabled)
+    # Now scrape the app's detail page from the App Store website
     try:
         response2 = requests.get(app_url, headers=headers, verify=False)
         response2.raise_for_status()
@@ -48,7 +48,7 @@ def search_ios_app(app_name):
 
     soup2 = BeautifulSoup(response2.text, "html.parser")
 
-    # Attempt to extract version info.
+    # Attempt to extract version info by scanning list items that start with "Version"
     version = None
     for li in soup2.find_all("li"):
         text = li.get_text(strip=True)
