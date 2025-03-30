@@ -1,7 +1,11 @@
-import sys
-import requests
-from bs4 import BeautifulSoup
-import urllib.parse
+try:
+    import sys
+    import requests
+    from bs4 import BeautifulSoup
+    import urllib.parse
+except ImportError as e:
+    missing_module = str(e).split("No module named ")[-1].strip("'")
+    sys.exit(f"Error: Missing required module '{missing_module}'. Please install it using: pip3 install {missing_module}")
 
 # ANSI color codes for terminal output
 RED = "\033[31m"
@@ -62,7 +66,11 @@ def search_android_app(app_name):
         sys.exit(f"{RED}[Android] Error while fetching app details: {e}{RESET}")
 
 def main():
-    app_name = input(f"{YELLOW}Enter the app name to check: {RESET}").strip()
+    try:
+        app_name = input(f"{YELLOW}Enter the app name to check: {RESET}").strip()
+    except EOFError:
+        sys.exit(f"{RED}No input provided. Exiting.{RESET}")
+    
     if not app_name:
         sys.exit(f"{RED}No app name provided. Exiting.{RESET}")
     
