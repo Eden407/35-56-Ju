@@ -1,108 +1,118 @@
-from requests_html import HTMLSession
-import urllib.parse
 import sys
+import time
+import urllib.parse
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
+# --------- Selenium Setup ---------
+options = Options()
+options.add_argument("--headless")       # run headless (no visible browser)
+options.add_argument("--disable-gpu")
+options.add_argument("--no-sandbox")
+driver = webdriver.Chrome(options=options)
+
+# --------- iOS Data Retrieval ---------
 def fetch_ios_data(app_name):
-    session = HTMLSession()
     query = urllib.parse.quote(app_name)
     # Use iTunes Search API to get the app's public page URL
     search_url = f"https://itunes.apple.com/search?term={query}&entity=software"
-    r = session.get(search_url)
     try:
-        data = r.json()
+        response = requests.get(search_url)
+        response.raise_for_status()
+        data = response.json()
+        if not data.get("results"):
+            print("No iOS app found for", app_name)
+            return
+        track_view_url = data["results"][0].get("trackViewUrl")
+        if not track_view_url:
+            print("No trackViewUrl found for iOS app")
+            return
     except Exception as e:
-        print("Error parsing iTunes API response:", e)
-        return
-
-    if not data.get("results"):
-        print("No iOS app found for", app_name)
-        return
-
-    track_view_url = data["results"][0].get("trackViewUrl")
-    if not track_view_url:
-        print("No trackViewUrl found for iOS app")
+        print("Error during iTunes Search API call:", e)
         return
 
     print("\niOS App URL:", track_view_url)
-    # Fetch the app detail page and render JavaScript if needed
-    r = session.get(track_view_url)
-    try:
-        r.html.render(timeout=10)
-    except Exception as e:
-        print("Error rendering iOS page:", e)
-    
-    # --- Extract Version ---
-    version = "Version not found"
-    # Try to find an element (for example, an <li> element) that contains "Version"
-    version_elem = r.html.find("li", containing="Version", first=True)
-    if version_elem:
-        version = version_elem.text.strip()
-    
-    # --- Extract Release Notes ---
-    release_notes = "Release notes not found"
-    # Look for a header containing "What's New" or "What’s New"
-    header = r.html.find("h2", containing="What's New", first=True)
-    if not header:
-        header = r.html.find("h2", containing="What’s New", first=True)
-    if header:
-        # Try to get the next sibling element's text using the underlying element
-        try:
-            sibling = header.element.getnext()
-            if sibling is not None:
-                release_notes = sibling.text_content().strip()
-        except Exception as e:
-            print("Error extracting iOS release notes:", e)
-    
-    print("\niOS Data:")
-    print("Version:", version)
-    print("Release Notes:", release_notes)
+    driver.get(track_view_url)
+    time.sleep(4)  # wait for page to load
 
+    # -------- Extract Version --------
+    ios_version = "Version not found"
+    try:
+        # Try to locate an element that contains "Version"
+        version_element = driver.find_element(By.XPATH, "//*[contains(text(),'Version')]")
+        ios_version = version_element.text.strip()
+    except Exception as e:
+        print("Error extracting iOS version:", e)
+
+    # -------- Extract Release Notes --------
+    ios_release_notes = "Release notes not found"
+    try:
+        # Look for a header that contains "What's New" (or “What’s New”)
+        header = None
+        try:
+            header = driver.find_element(By.XPATH, "//*[contains(text(),\"What's New\")]")
+        except:
+            header = driver.find_element(By.XPATH, "//*[contains(text(),'What’s New')]")
+        if header:
+            # Assume that the release notes are in the next sibling element
+            notes_elem = header.find_element(By.XPATH, "following-sibling::*")
+            ios_release_notes = notes_elem.text.strip()
+    except Exception as e:
+        print("Error extracting iOS release notes:", e)
+
+    print("\n[iOS App Data]")
+    print("Version:", ios_version)
+    print("Release Notes:", ios_release_notes)
+
+# --------- Android Data Retrieval ---------
 def fetch_android_data(app_name):
-    session = HTMLSession()
     query = urllib.parse.quote(app_name)
     search_url = f"https://play.google.com/store/search?q={query}&c=apps"
-    r = session.get(search_url)
     try:
-        r.html.render(timeout=10)
+        driver.get(search_url)
+        time.sleep(4)  # wait for search results to load
+        # Find the first app link whose href contains '/store/apps/details?id='
+        app_link = driver.find_element(By.XPATH, "//a[contains(@href, '/store/apps/details?id=')]")
+        app_url = app_link.get_attribute("href")
     except Exception as e:
-        print("Error rendering Android search page:", e)
-    
-    # Find the first app link (href contains '/store/apps/details?id=')
-    app_link = r.html.find("a[href*='/store/apps/details?id=']", first=True)
-    if not app_link:
-        print("No Android app found for", app_name)
+        print("Error finding Android app for", app_name, ":", e)
         return
-    app_url = "https://play.google.com" + app_link.attrs.get("href", "")
-    print("\nAndroid App URL:", app_url)
-    
-    r = session.get(app_url)
-    try:
-        r.html.render(timeout=10, sleep=2)
-    except Exception as e:
-        print("Error rendering Android app page:", e)
-    
-    # --- Extract Version ---
-    android_version = "Version not found"
-    # The Android version is usually located in a container within the "Additional Information" section.
-    # This example uses a CSS selector to find a div with class "hAyfc" that contains "Current Version"
-    version_elem = r.html.find("div.hAyfc", containing="Current Version", first=True)
-    if version_elem:
-        # Within this container, the actual version is usually in a span with class "htlgb"
-        span_elem = version_elem.find("span.htlgb", first=True)
-        if span_elem:
-            android_version = span_elem.text.strip()
-    
-    # --- Extract Release Notes ---
-    android_release_notes = "Release notes not found"
-    # On Google Play, the "What's New" content is typically inside an element with a class like "W4P4ne"
-    notes_elem = r.html.find("div.W4P4ne", first=True)
-    if notes_elem:
-        android_release_notes = notes_elem.text.strip()
 
-    print("\nAndroid Data:")
+    print("\nAndroid App URL:", app_url)
+    driver.get(app_url)
+    time.sleep(4)  # wait for the app page to load
+    # Scroll down to load additional information (if needed)
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(3)
+
+    # -------- Extract Android Version --------
+    android_version = "Version not found"
+    try:
+        # In the "Additional Information" section, find the container with "Current Version"
+        version_elem = driver.find_element(
+            By.XPATH,
+            "//div[@class='hAyfc' and .//div[contains(text(), 'Current Version')]]//span[@class='htlgb']"
+        )
+        android_version = version_elem.text.strip()
+    except Exception as e:
+        print("Error extracting Android version:", e)
+
+    # -------- Extract Android Release Notes --------
+    android_release_notes = "Release notes not found"
+    try:
+        # The "What's New" section is often in a div with a class that includes "W4P4ne"
+        notes_elem = driver.find_element(By.XPATH, "//*[contains(@class, 'W4P4ne')]")
+        android_release_notes = notes_elem.text.strip()
+    except Exception as e:
+        print("Error extracting Android release notes:", e)
+
+    print("\n[Android App Data]")
     print("Version:", android_version)
     print("Release Notes:", android_release_notes)
 
+# -------- Main Function --------
 def main():
     try:
         app_name = input("Enter the app name to check: ").strip()
@@ -111,10 +121,11 @@ def main():
     
     if not app_name:
         sys.exit("No app name provided. Exiting.")
-    
+
     print("\nFetching latest release info for:", app_name)
     fetch_ios_data(app_name)
     fetch_android_data(app_name)
+    driver.quit()
 
 if __name__ == "__main__":
     main()
