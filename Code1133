@@ -1,5 +1,47 @@
+import sys
+import requests
+from bs4 import BeautifulSoup
+import urllib.parse
+import urllib3
+
+# Disable insecure request warnings (for testing only)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# ANSI color codes for terminal output
+RED = "\033[31m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+BLUE = "\033[34m"
+RESET = "\033[0m"
+
+def extract_ios_release_notes(soup):
+    release_notes = None
+    # Attempt 1: Look for a section with aria-label "What's New"
+    section = soup.find("section", attrs={"aria-label": "What's New"})
+    if section:
+        release_notes = section.get_text(separator="\n", strip=True)
+        if release_notes:
+            return release_notes
+
+    # Attempt 2: Look for a div with a class that might indicate release notes (example: "whats-new")
+    div = soup.find("div", class_="whats-new")
+    if div:
+        release_notes = div.get_text(separator="\n", strip=True)
+        if release_notes:
+            return release_notes
+
+    # Attempt 3: Look for header tags containing "What's New" then the next sibling element
+    header = soup.find(lambda tag: tag.name in ["h2", "h3"] and "What's New" in tag.get_text())
+    if header:
+        sibling = header.find_next_sibling()
+        if sibling:
+            release_notes = sibling.get_text(separator="\n", strip=True)
+            if release_notes:
+                return release_notes
+
+    return None
+
 def search_ios_app(app_name):
-    import urllib.parse
     query = urllib.parse.quote(app_name)
     # Use iTunes Search API to get the app detail page URL
     search_url = f"https://itunes.apple.com/search?term={query}&entity=software"
@@ -40,34 +82,10 @@ def search_ios_app(app_name):
             version = text.replace("Version", "").strip()
             break
     if not version:
-        version_candidate = soup2.find(string=lambda t: t and "Version" in t)
-        if version_candidate:
-            version = version_candidate.split("Version")[-1].strip()
-    if not version:
         version = "Version info not found"
 
     # --- Extract Release Notes ---
-    release_notes = None
-
-    # Attempt 1: Look for a section with aria-label "What's New"
-    whats_new_section = soup2.find("section", attrs={"aria-label": "What's New"})
-    if whats_new_section:
-        # Sometimes the release notes are within a <p> tag inside this section
-        p_elem = whats_new_section.find("p")
-        if p_elem:
-            release_notes = p_elem.get_text(separator="\n", strip=True)
-        else:
-            release_notes = whats_new_section.get_text(separator="\n", strip=True)
-
-    # Attempt 2: Look for header tags containing "What's New" and then find the following element
-    if not release_notes:
-        header = soup2.find(lambda tag: tag.name in ["h2", "h3"] and "What's New" in tag.text)
-        if header:
-            next_elem = header.find_next_sibling()
-            if next_elem:
-                release_notes = next_elem.get_text(separator="\n", strip=True)
-
-    # Final fallback if still not found
+    release_notes = extract_ios_release_notes(soup2)
     if not release_notes:
         release_notes = "Release notes not found"
 
@@ -76,3 +94,52 @@ def search_ios_app(app_name):
     print(f"{YELLOW}Version:{RESET} {version}")
     print(f"{YELLOW}Release Notes:{RESET}\n{release_notes}")
     return True
+
+def search_android_app(app_name):
+    query = urllib.parse.quote(app_name)
+    search_url = f"https://play.google.com/store/search?q={query}&c=apps&hl=en&gl=us"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        r = requests.get(search_url, headers=headers)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        # Find the first app detail link
+        app_link = soup.select_one("a[href^='/store/apps/details?id=']")
+        if not app_link:
+            print(f"{RED}[Android] App '{app_name}' not found on Google Play.{RESET}")
+            return None
+
+        app_url = "https://play.google.com" + app_link["href"]
+        r = requests.get(app_url, headers=headers)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        title_tag = soup.find("h1", class_="AHFaub")
+        title = title_tag.get_text(strip=True) if title_tag else "Unknown App"
+        
+        # "What's New" on Google Play is often within a div with class "W4P4ne"
+        whats_new_section = soup.find("div", class_="W4P4ne")
+        release_notes = whats_new_section.get_text(separator="\n", strip=True) if whats_new_section else "No release notes found."
+        
+        print(f"\n{BLUE}[Android]{RESET}")
+        print(f"{GREEN}{title}{RESET}")
+        print(f"{YELLOW}Release Notes:{RESET}\n{release_notes}")
+    except Exception as e:
+        print(f"{RED}[Android] Error fetching app details: {e}{RESET}")
+        return None
+
+def main():
+    try:
+        app_name = input(f"{YELLOW}Enter the app name to check: {RESET}").strip()
+    except EOFError:
+        sys.exit(f"{RED}No input provided. Exiting.{RESET}")
+    
+    if not app_name:
+        sys.exit(f"{RED}No app name provided. Exiting.{RESET}")
+    
+    print(f"\nFetching latest release info for '{app_name}'...")
+    search_ios_app(app_name)
+    search_android_app(app_name)
+
+if __name__ == "__main__":
+    main()
