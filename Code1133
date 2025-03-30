@@ -2,6 +2,7 @@ import sys
 import requests
 from bs4 import BeautifulSoup
 import urllib.parse
+import certifi  # Provides Mozilla's root certificates
 
 # ANSI color codes for terminal output
 RED = "\033[31m"
@@ -14,7 +15,8 @@ def search_ios_app(app_name):
     query = urllib.parse.quote(app_name)
     url = f"https://itunes.apple.com/search?term={query}&entity=software"
     try:
-        response = requests.get(url)
+        # Use certifi's bundle for SSL certificate verification
+        response = requests.get(url, verify=certifi.where())
         response.raise_for_status()
     except Exception as e:
         print(f"{RED}[iOS] Fail fetching app info: {e}{RESET}")
@@ -22,10 +24,66 @@ def search_ios_app(app_name):
 
     results = response.json().get("results", [])
     if not results:
-        print(f"{RED}[iOS] App '{app_name}' not found. {RESET}")
+        print(f"{RED}[iOS] App '{app_name}' not found.{RESET}")
         return None
 
     app = results[0]  # take the first match
+    name = app.get("trackName", "Unknown App")
+    version = app.get("version", "N/A")
+    release_notes = app.get("releaseNotes", "No release notes provided.")
+    print(f"\n{BLUE}[iOS]{RESET} {GREEN}{name}{RESET}")
+    print(f"{YELLOW}Version:{RESET} {version}")
+    print(f"{YELLOW}Release Notes:{RESET}")
+    print(release_notes)
+    return True
+
+def search_android_app(app_name):
+    query = urllib.parse.quote(app_name)
+    search_url = f"https://play.google.com/store/search?q={query}&c=apps&hl=en&gl=us"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    
+    try:
+        r = requests.get(search_url, headers=headers)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        app_link = soup.select_one("a[href^='/store/apps/details?id=']")
+        if not app_link:
+            print(f"{RED}[Android] App '{app_name}' not found on Google Play.{RESET}")
+            return None
+        
+        app_url = "https://play.google.com" + app_link["href"]
+        r = requests.get(app_url, headers=headers)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        title_tag = soup.find("h1", class_="AHFaub")
+        title = title_tag.text.strip() if title_tag else "Unknown App"
+        whats_new_section = soup.find("div", class_="W4P4ne")
+        release_notes = whats_new_section.text.strip() if whats_new_section else "No release notes found."
+        
+        print(f"\n{BLUE}[Android]{RESET} {GREEN}{title}{RESET}")
+        print(f"{YELLOW}Release Notes:{RESET}")
+        print(release_notes)
+    except Exception as e:
+        print(f"{RED}[Android] Error while fetching app details: {e}{RESET}")
+        return None
+
+def main():
+    try:
+        app_name = input(f"{YELLOW}Enter the app name to check: {RESET}").strip()
+    except EOFError:
+        sys.exit(f"{RED}No input provided. Exiting.{RESET}")
+    
+    if not app_name:
+        sys.exit(f"{RED}No app name provided. Exiting.{RESET}")
+    
+    print(f"\n{BLUE}Fetching latest release info for '{app_name}'...{RESET}")
+    ios_result = search_ios_app(app_name)
+    # Even if iOS fails, attempt Android.
+    search_android_app(app_name)
+
+if __name__ == "__main__":
+    main()
     name = app.get("trackName", "Unknown App")
     version = app.get("version", "N/A")
     release_notes = app.get("releaseNotes", "No release notes provided.")
