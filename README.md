@@ -1,67 +1,87 @@
-⸻
-
-QA Begginers Detecting and Handling Bugs
-
-What is a Bug?
-
-A bug is anything in the software that doesn’t behave as expected. This can include:
-	•	Crashes or freezes
-	•	Wrong results or calculations
-	•	UI problems (layout issues, missing elements)
-	•	Buttons or features not responding
-	•	Slow or strange behavior
+Absolutely — here’s the updated version of the internal guide with that point included in a clear, helpful way:
 
 ⸻
 
-How QA Detects a Bug
-	1.	Explore and test features like a real user.
-	2.	Watch for issues – is something off, broken, or confusing?
-	3.	Try to reproduce the issue multiple times.
-	4.	Document the bug:
-	•	Clear steps to reproduce
-	•	What you expected vs what happened
-	•	Screenshots, screen recordings, logs
-	•	Mention where it happened (device/browser/env)
+Internal Connectivity Guide
+
+Is it a Network Issue, a Blocked Domain, or Just a Wi-Fi Glitch?
+
+Use this guide to understand what’s wrong — and what kind of ticket to open.
 
 ⸻
 
-How to Report a Bug
+Step 1: Test Basic Internet Access
 
-Use your team’s bug tracking system (like Jira). Include:
-	•	Title: short and clear
-	•	Description: steps, actual vs expected
-	•	Attachments: screenshots/videos/logs
-	•	Severity/Priority: how bad is it? Does it block users?
+Open these websites in your browser:
+	•	https://www.bing.com
+	•	https://example.com
+	•	Your company portal (if available)
 
-⸻
+If NONE of them load:
 
-How Developers Might Respond
-	1.	“I can’t reproduce it.”
-→ Provide detailed steps or screen recording. Offer to walk through it.
-	2.	“That’s expected behavior.”
-→ Double-check design docs or ask the product team. If it feels wrong to a user, it still matters.
-	3.	“It’s a known issue.”
-→ Confirm it’s tracked somewhere. If it affects testing, mention it in reports.
-	4.	“Works on my machine.”
-→ Compare environments or test data. Try to narrow down what’s different.
+This is likely a full network issue.
+You’re not connected to the internet.
+
+Action:
+	•	Check if you’re connected to Wi-Fi
+	•	If you are, but nothing loads, move to Step 1A
 
 ⸻
 
-Good QA Always Double-Checks Themselves
-	•	Make sure it’s really a bug and not a misunderstanding.
-	•	Test in different environments or devices if needed.
-	•	Clear cache or re-login to eliminate edge cases.
-	•	Ask: “Would a user find this confusing or frustrating?”
-	•	Double-check before reporting — avoid false alarms.
+Step 1A: Restart Wi-Fi on Your Device
+
+Sometimes the device is connected to Wi-Fi, but not properly.
+This is often caused by:
+	•	Weak signal
+	•	Device failing to renew its IP
+	•	Internal Wi-Fi module issue
+
+Action:
+	•	Turn Wi-Fi off and back on
+	•	Or restart the device completely
+
+Then test websites again.
+
+If websites still don’t work → Open a Network Issue ticket.
 
 ⸻
 
-Golden Tips
-	•	Be detailed, clear, and calm.
-	•	Your goal is to help the team build a better product.
-	•	QA is not about blame — it’s about quality and user experience.
-	•	Always re-test bugs after they are marked as fixed.
+Step 2: One App or Website Doesn’t Work
+
+If most websites work, but one app or site fails, it’s probably a blocked or closed domain.
+
+Example:
+	•	Google.com loads fine, but the company chat app doesn’t connect.
+
+This is not a Wi-Fi problem — it’s a domain-level issue.
+
+Action:
+	•	Open a Domain Access ticket
+	•	Include the name of the site or domain that doesn’t work
+(e.g., api.appname.com or service-name.io)
 
 ⸻
 
-Let me know if you’d like this as a PDF, or styled with icons or color to make it more fun for your friend!
+Step 3: Ask Around (Optional Check)
+
+Still not sure?
+Ask a colleague:
+	•	“Is this website or app working for you?”
+	•	If yes: Try restarting your device or browser.
+	•	If no: It’s likely blocked for everyone — report it.
+
+⸻
+
+Quick Reference – What to Do
+
+Problem	What It Means	Action
+No sites work at all	Full network outage or bad Wi-Fi	1. Restart Wi-Fi/device → 2. If still broken: Open Network Issue ticket
+Wi-Fi shows connected but nothing loads	Weak or stuck connection	Restart device, retry
+Most sites work, one fails	Blocked domain	Open Domain Access ticket with full domain
+App says “No Internet,” but browser works	App checks a blocked test domain	Open Domain Access ticket with domain name
+
+
+
+⸻
+
+Let me know if you’d like this in a PDF layout or with visual icons to distribute internally!
