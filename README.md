@@ -1,3 +1,9 @@
+	2.	server.js is far too big: 1,260 lines. createApp() holds about 200 action handlers in one place, which breaks the repo's 500-line rule and ties everything together. The audit already suggested a src/actions/ split; it hasn't been done.
+	3.	Messages can't be trusted by author. Anyone or anything that can write board.md can post as ## … Human or add "priority":"high" metadata. A prompt injection in one project's files could spread to every agent. The audit's suggestion to sign server-written entries is still open (there's no HMAC in bus.js).
+	4.	Messages can be lost when two writers hit the board at once. Agents that edit board.md with an Edit tool rewrite the whole file while the server appends to it, so one write can overwrite the other.
+	5.	The screen reading is fragile. Mode switching, permission answers and plan approval depend on each CLI's on-screen text, option labels and key bindings. Any CLI update can silently break it. The notes admit that the Gemini and opencode plan paths haven't been tested against a live CLI.
+	6.	The board only grows. It is re-read and re-parsed in full on every change, and nothing archives old messages
+
 Absolutely — here’s the updated version of the internal guide with that point included in a clear, helpful way:
 
 ⸻
